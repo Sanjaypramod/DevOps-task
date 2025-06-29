@@ -1,6 +1,5 @@
 name: CI/CD Pipeline
 
-# Trigger the pipeline only on push or pull request events to master branch
 on:
   push:
     branches:
@@ -10,88 +9,76 @@ on:
       - master
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+    # Step 1: Checkout code
     - name: Checkout code
       uses: actions/checkout@v2
 
-    # Step to set up Python for the Flask backend
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    # Step 2: Set up AWS CLI credentials
+    - name: Set up AWS CLI
+      uses: aws-actions/configure-aws-credentials@v1
       with:
-        python-version: '3.9'
+        aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws_region: "ap-south-1"  # Replace with your AWS region
 
-    # Install Flask dependencies
-    - name: Install dependencies for Flask
+    # Step 3: Install kubectl
+    - name: Install kubectl
       run: |
-        cd flask-backend
-        python -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
+        curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
 
-    # Step to set up Node.js for React frontend
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '14'
-
-    # Install React dependencies
-    - name: Install dependencies for React
+    # Step 4: Configure kubectl to access your private EKS cluster
+    - name: Update kubeconfig
       run: |
-        cd reactjs-frontend
-        npm install
+        aws eks --region ap-south-1 update-kubeconfig --name vishnu-eks-sanjay
 
-    # Build the React app
-    - name: Build React app
-      run: |
-        cd reactjs-frontend
-        npm run build
+    # Step 5: Verify kubectl configuration
+    - name: Verify kubectl configuration
+      run: kubectl get nodes
 
-    # Docker build for Flask backend
-    - name: Build Flask Docker image
+    # Step 6: Build Docker image for Flask Backend
+    - name: Build Docker image for Flask Backend
       run: |
         cd flask-backend
         docker build -t flask-backend .
 
-    # Docker build for React frontend
-    - name: Build React Docker image
+    # Step 7: Build Docker image for React Frontend
+    - name: Build Docker image for React Frontend
       run: |
         cd reactjs-frontend
         docker build -t reactjs-frontend .
 
-    # Push Docker images to Docker Hub (or any other registry)
-    - name: Push Docker images
+    # Step 8: Push Docker image for Flask Backend to ECR
+    - name: Push Docker image to ECR for Flask Backend
       run: |
-        docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-        docker tag flask-backend ${{ secrets.DOCKER_USERNAME }}/flask-backend:latest
-        docker push ${{ secrets.DOCKER_USERNAME }}/flask-backend:latest
-        docker tag reactjs-frontend ${{ secrets.DOCKER_USERNAME }}/reactjs-frontend:latest
-        docker push ${{ secrets.DOCKER_USERNAME }}/reactjs-frontend:latest
+        docker login -u AWS -p ${{ secrets.AWS_ACCESS_KEY_ID }} ${{ secrets.AWS_SECRET_ACCESS_KEY }} 476356830795.dkr.ecr.ap-south-1.amazonaws.com
+        docker tag flask-backend:latest 476356830795.dkr.ecr.ap-south-1.amazonaws.com/flask-backend:latest
+        docker push 476356830795.dkr.ecr.ap-south-1.amazonaws.com/flask-backend:latest
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    # Step 9: Push Docker image for React Frontend to ECR
+    - name: Push Docker image to ECR for React Frontend
+      run: |
+        docker login -u AWS -p ${{ secrets.AWS_ACCESS_KEY_ID }} ${{ secrets.AWS_SECRET_ACCESS_KEY }} 476356830795.dkr.ecr.ap-south-1.amazonaws.com
+        docker tag reactjs-frontend:latest 476356830795.dkr.ecr.ap-south-1.amazonaws.com/reactjs-frontend:latest
+        docker push 476356830795.dkr.ecr.ap-south-1.amazonaws.com/reactjs-frontend:latest
 
-    - name: Set up Helm
+    # Step 10: Install Helm for Kubernetes Deployment
+    - name: Install Helm
       run: |
         curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
         helm version
 
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v1
-
-    # Set the KUBECONFIG variable using the GitHub secret or your context
-    - name: Set up Kube config
+    # Step 11: Deploy Flask Backend using Helm
+    - name: Deploy Flask Backend to Kubernetes using Helm
       run: |
-        echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
-        export KUBECONFIG=kubeconfig.yaml
+        helm upgrade --install flask-backend ./k8s/helmchart-flask-backend --values ./k8s/helmchart-flask-backend/values.yaml
 
-    # Deploy using Helm charts
-    - name: Deploy using Helm
+    # Step 12: Deploy React Frontend using Helm
+    - name: Deploy React Frontend to Kubernetes using Helm
       run: |
-        helm upgrade --install my-app ./k8s/helmchart-twotierapp --values ./k8s/helmchart-twotierapp/values.yaml
+        helm upgrade --install reactjs-frontend ./k8s/helmchart-reactjs-frontend --values ./k8s/helmchart-reactjs-frontend/values.yaml
