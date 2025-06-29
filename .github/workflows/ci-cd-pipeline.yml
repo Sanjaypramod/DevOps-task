@@ -83,11 +83,10 @@ jobs:
 # Step 10: Deploy Flask Backend using Helm
     - name: Deploy Flask Backend to Kubernetes using Helm
       run: |
-       helm upgrade --install flask-backend ./helmchart-twotierapp --values ./helmchart-twotierapp/values.yaml
-
+       helm upgrade --install flask-backend ./templates/helmchart-twotierapp --values ./templates/helmchart-twotierapp/values.yaml
 
 # Step 11: Deploy React Frontend using Helm
     - name: Deploy React Frontend to Kubernetes using Helm
       run: |
-       helm upgrade --install reactjs-frontend ./helmchart-twotierapp --values ./helmchart-twotierapp/values.yaml
+       helm upgrade --install reactjs-frontend ./templates/helmchart-twotierapp --values ./templates/helmchart-twotierapp/values.yaml
 
