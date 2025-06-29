@@ -88,10 +88,10 @@ jobs:
 
 # Step 10: Deploy Flask Backend using Helm
     - name: Deploy Flask Backend to Kubernetes using Helm
-       run: |
+      run: |
        helm upgrade --install flask-backend ./k8s/helmchart-flask-backend --values ./k8s/helmchart-flask-backend/values.yaml
 
 # Step 11: Deploy React Frontend using Helm
     - name: Deploy React Frontend to Kubernetes using Helm
-       run: |
+      run: |
        helm upgrade --install reactjs-frontend ./k8s/helmchart-reactjs-frontend --values ./k8s/helmchart-reactjs-frontend/values.yaml
